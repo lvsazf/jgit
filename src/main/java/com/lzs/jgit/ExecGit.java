@@ -3,7 +3,11 @@ package com.lzs.jgit;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.commons.lang.StringUtils;
@@ -13,32 +17,25 @@ import org.eclipse.jgit.api.CommitCommand;
 import org.eclipse.jgit.api.DiffCommand;
 import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.MergeCommand;
-import org.eclipse.jgit.api.MergeCommand.FastForwardMode;
+import org.eclipse.jgit.api.ListBranchCommand;
+import org.eclipse.jgit.api.MergeResult;
 import org.eclipse.jgit.api.PullCommand;
 import org.eclipse.jgit.api.PullResult;
 import org.eclipse.jgit.api.PushCommand;
-import org.eclipse.jgit.api.RebaseResult;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.StatusCommand;
-import org.eclipse.jgit.api.errors.CheckoutConflictException;
-import org.eclipse.jgit.api.errors.ConcurrentRefUpdateException;
 import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.api.errors.InvalidMergeHeadsException;
 import org.eclipse.jgit.api.errors.InvalidRemoteException;
-import org.eclipse.jgit.api.errors.NoFilepatternException;
-import org.eclipse.jgit.api.errors.NoHeadException;
-import org.eclipse.jgit.api.errors.NoMessageException;
 import org.eclipse.jgit.api.errors.TransportException;
-import org.eclipse.jgit.api.errors.WrongRepositoryStateException;
-import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.errors.NoWorkTreeException;
-import org.eclipse.jgit.lib.BranchConfig.BranchRebaseMode;
-import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Ref;
+import org.eclipse.jgit.merge.ResolveMerger.MergeFailureReason;
+import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.CredentialsProvider;
 import org.eclipse.jgit.transport.FetchResult;
+import org.eclipse.jgit.transport.PushResult;
+import org.eclipse.jgit.transport.RemoteRefUpdate;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 
 import com.alibaba.fastjson.JSONObject;
@@ -57,36 +54,34 @@ public class ExecGit {
 			throw new FileNotFoundException(file.getAbsolutePath() + "不存在");
 		git = Git.open(file);
 	}
-	
-	public ExecGit(Git git){
+
+	public ExecGit(Git git) {
 		this.git = git;
 	}
-	
+
 	public ExecGit() {
 		super();
 	}
 
-	public static void main(String[] args) {
-		try {
-			ExecGit git = new ExecGit("D:/tmp/test2");
-//			git.fetch("lzs", "1uzs.@00");
-			boolean flag = git.pullRepository("lzs", "1uzs.@00");
-			System.out.println(flag);
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		} catch (GitAPIException e) {
-			e.printStackTrace();
+	public void showLog() throws GitAPIException {
+		Iterable<RevCommit> revCommit = git.log().call();
+		Iterator<RevCommit> iterator = revCommit.iterator();
+		while (iterator.hasNext()) {
+			System.out.println(iterator.next().getFullMessage() + "-----------");
 		}
 	}
 
-	public void addIndex(String filepattern) throws NoFilepatternException, GitAPIException {
-		AddCommand command = git.add();
-		command.addFilepattern(filepattern).call();
+	public void getBranch() throws GitAPIException {
+		ListBranchCommand branchs = git.branchList();
+		List<Ref> refs = branchs.call();
+		for (Ref ref : refs) {
+			System.out.println(ref.getName());
+		}
 	}
 
-	public void commitRepository(String message) throws GitAPIException {
+	public void commitRepository(String filepattern, String message) throws GitAPIException {
+		AddCommand addCommand = git.add();
+		addCommand.addFilepattern(filepattern).call();
 		CommitCommand command = git.commit();
 		command.setMessage(message);
 		command.setAllowEmpty(true);
@@ -95,12 +90,33 @@ public class ExecGit {
 		command.call();
 	}
 
-	public void pushRepository() throws InvalidRemoteException, TransportException, GitAPIException {
+	public boolean pushRepository(String username, String password)
+			throws InvalidRemoteException, TransportException, GitAPIException {
+		boolean flag = false;
 		PushCommand command = git.push();
-		command.setPushAll().call();
+		if (StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password)) {
+			CredentialsProvider credentialsProvider = new UsernamePasswordCredentialsProvider(username, password);
+			command.setCredentialsProvider(credentialsProvider);
+		}
+		command.setAtomic(true).setForce(true);
+		Iterable<PushResult> results = command.setPushAll().call();
+		Iterator<PushResult> iterator = results.iterator();
+		while (iterator.hasNext()) {
+			Collection<RemoteRefUpdate> remoteUpdates = iterator.next().getRemoteUpdates();
+			for (RemoteRefUpdate remoteRefUpdate : remoteUpdates) {
+				if ("OK".equals(remoteRefUpdate.getStatus().name()))
+					flag = true;
+			}
+		}
+		return flag;
 	}
 
-	public static ExecGit cloneRepository(String uri,String pathname) throws GitAPIException {
+	public boolean pushRepository() throws InvalidRemoteException, TransportException, GitAPIException {
+		boolean flag = pushRepository(null, null);
+		return flag;
+	}
+
+	public static ExecGit cloneRepository(String uri, String pathname) throws GitAPIException {
 		CloneCommand command = Git.cloneRepository();
 		command.setURI(uri);
 		CredentialsProvider provider = new UsernamePasswordCredentialsProvider("lzs", "1uzs.@00");
@@ -132,26 +148,42 @@ public class ExecGit {
 			CredentialsProvider credentialsProvider = new UsernamePasswordCredentialsProvider(username, password);
 			command.setCredentialsProvider(credentialsProvider);
 		}
-		command.setRebase(true);
 		PullResult result = command.call();
+		command.setRebase(true).setRemoteBranchName("master");
+		MergeResult mergeResult = result.getMergeResult();
+		if (mergeResult != null) {
+			Map<String, MergeFailureReason> failingPaths = mergeResult.getFailingPaths();
+			if (failingPaths != null) {
+				Set<Entry<String, MergeFailureReason>> entrySet = failingPaths.entrySet();
+				for (Entry<String, MergeFailureReason> entry : entrySet) {
+					System.out.println(entry.getKey() + "---" + entry.getValue().name());
+				}
+			}
+			System.out.println("mergeStatus: " + mergeResult.getMergeStatus().isSuccessful());
+		}
 		boolean successful = result.isSuccessful();
 		return successful;
 	}
-	
-	public void fetch(String username, String password) throws InvalidRemoteException, TransportException, GitAPIException{
+
+	public void removeBranch(String... names) throws GitAPIException {
+		git.branchDelete().setBranchNames(names).call();
+	}
+
+	public void fetch(String username, String password)
+			throws InvalidRemoteException, TransportException, GitAPIException {
 		FetchCommand command = git.fetch();
 		CredentialsProvider credentialsProvider = new UsernamePasswordCredentialsProvider(username, password);
 		command.setCredentialsProvider(credentialsProvider);
 		FetchResult result = command.call();
 		System.out.println(result.getMessages());
 	}
-	
-	public void merge() throws GitAPIException{
-		
-//		git.pull().call();
-			
+
+	public void merge() throws GitAPIException {
+
+		//		git.pull().call();
+
 	}
-	
+
 	public boolean pullRepository() throws GitAPIException {
 		return this.pullRepository(null, null);
 	}
@@ -219,6 +251,25 @@ public class ExecGit {
 
 	public void setGit(Git git) {
 		this.git = git;
+	}
+
+	public static void main(String[] args) throws FileNotFoundException, IOException {
+		try {
+			//			ExecGit.cloneRepository("http://git.wex5.com:9999/lzs/lzs.git", "D:/tmp/test2");
+			ExecGit git = new ExecGit("D:/tmp/test2");
+			git.setaName("test");
+			git.setaEmailAddress("test@163.com");
+			git.getBranch();
+						git.showLog();
+//			git.commitRepository(".", "");
+//			boolean flag = git.pullRepository("lzs", "1uzs.@00");
+//			System.out.println(flag);
+//			boolean pushResult = git.pushRepository("lzs", "1uzs.@00");
+//			System.out.println(pushResult);
+			//			System.out.println(git.listChangedFiles());
+		} catch (GitAPIException e) {
+			e.printStackTrace();
+		}
 	}
 
 }

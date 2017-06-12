@@ -6,7 +6,7 @@
 	<version>0.0.1</version>
 	<properties>
 		<jackson.version>2.6.3</jackson.version>
-		<jgit.version>4.7.0.201704051617-r</jgit.version>
+		<jgit.version>4.7.1.201706071930-r</jgit.version>
 	</properties>
 
 	<repositories>
