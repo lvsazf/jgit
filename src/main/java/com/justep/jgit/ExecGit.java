@@ -1,4 +1,4 @@
-package com.lzs.jgit;
+package com.justep.jgit;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -94,7 +94,7 @@ public class ExecGit {
 			throws InvalidRemoteException, TransportException, GitAPIException {
 		boolean flag = false;
 		PushCommand command = git.push();
-		if (StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password)) {
+		if (StringUtils.isNotBlank(username)) {
 			CredentialsProvider credentialsProvider = new UsernamePasswordCredentialsProvider(username, password);
 			command.setCredentialsProvider(credentialsProvider);
 		}
@@ -102,13 +102,22 @@ public class ExecGit {
 		Iterable<PushResult> results = command.setPushAll().call();
 		Iterator<PushResult> iterator = results.iterator();
 		while (iterator.hasNext()) {
-			Collection<RemoteRefUpdate> remoteUpdates = iterator.next().getRemoteUpdates();
+			PushResult next = iterator.next();
+			Collection<RemoteRefUpdate> remoteUpdates = next.getRemoteUpdates();
 			for (RemoteRefUpdate remoteRefUpdate : remoteUpdates) {
 				if ("OK".equals(remoteRefUpdate.getStatus().name()))
 					flag = true;
 			}
 		}
 		return flag;
+	}
+	
+	public boolean pushRepository(String token) throws GitAPIException{
+		return pushRepository(token,"");
+	}
+
+	public void checkout() throws GitAPIException {
+		git.checkout().setName("master").setAllPaths(true).call();
 	}
 
 	public boolean pushRepository() throws InvalidRemoteException, TransportException, GitAPIException {
@@ -132,6 +141,22 @@ public class ExecGit {
 		command.call();
 	}
 
+	public void createStash() throws GitAPIException {
+		PersonIdent author = new PersonIdent(aName, aEmailAddress);
+		git.stashCreate().setIncludeUntracked(true).setIndexMessage("stash files").setPerson(author).call();
+
+		//		
+
+	}
+
+	public void applyStash() throws GitAPIException {
+		git.stashApply().call();
+	}
+
+	public void clearStash() throws GitAPIException {
+		git.stashDrop().setAll(true).call();
+	}
+
 	/**
 	 * <p>MethodName: pullRepository</p>
 	 * <p>Description: git pull</p>
@@ -149,7 +174,6 @@ public class ExecGit {
 			command.setCredentialsProvider(credentialsProvider);
 		}
 		PullResult result = command.call();
-		command.setRebase(true).setRemoteBranchName("master");
 		MergeResult mergeResult = result.getMergeResult();
 		if (mergeResult != null) {
 			Map<String, MergeFailureReason> failingPaths = mergeResult.getFailingPaths();
@@ -229,6 +253,10 @@ public class ExecGit {
 		return true;
 	}
 
+	public void closeGit() {
+		git.close();
+	}
+
 	public String getaName() {
 		return aName;
 	}
@@ -254,22 +282,33 @@ public class ExecGit {
 	}
 
 	public static void main(String[] args) throws FileNotFoundException, IOException {
+		
+		ExecGit git = null;
 		try {
 			//			ExecGit.cloneRepository("http://git.wex5.com:9999/lzs/lzs.git", "D:/tmp/test2");
-			ExecGit git = new ExecGit("D:/tmp/test2");
+			git = new ExecGit("D:/tmp/test2");
 			git.setaName("test");
 			git.setaEmailAddress("test@163.com");
-			git.getBranch();
-						git.showLog();
-//			git.commitRepository(".", "");
-//			boolean flag = git.pullRepository("lzs", "1uzs.@00");
-//			System.out.println(flag);
-//			boolean pushResult = git.pushRepository("lzs", "1uzs.@00");
-//			System.out.println(pushResult);
+			//			git.checkout();
+			//			git.getBranch();
+			//			git.showLog();
+			git.commitRepository(".", "");
+
+			//			git.createStash();
+			//			boolean flag = git.pullRepository("lzs", "1uzs.@00");
+			//			System.out.println(flag);
+			//			
+			//			git.applyStash();
+			boolean pushResult = git.pushRepository("lzs", "1uzs.@00");
+			System.out.println(pushResult);
 			//			System.out.println(git.listChangedFiles());
 		} catch (GitAPIException e) {
 			e.printStackTrace();
+		} finally {
+			if (git != null)
+				git.closeGit();
 		}
+
 	}
 
 }
