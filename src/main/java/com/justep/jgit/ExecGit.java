@@ -80,8 +80,15 @@ public class ExecGit {
 	}
 
 	public void commitRepository(String filepattern, String message) throws GitAPIException {
+		Status status = git.status().call();
 		AddCommand addCommand = git.add();
 		addCommand.addFilepattern(filepattern).call();
+		Set<String> missing = status.getMissing();
+		if (missing != null && missing.size() > 0) {
+			for (String s : missing) {
+				git.rm().setCached(true).addFilepattern(s).call();
+			}
+		}
 		CommitCommand command = git.commit();
 		command.setMessage(message);
 		command.setAllowEmpty(true);
@@ -293,10 +300,12 @@ public class ExecGit {
 			//			git.getBranch();
 			//			git.showLog();
 			git.commitRepository(".", "");
+			JSONObject listChangedFiles = git.listChangedFiles();
+			System.out.println(listChangedFiles);
 
 			//			git.createStash();
-			//			boolean flag = git.pullRepository("lzs", "1uzs.@00");
-			//			System.out.println(flag);
+//						boolean flag = git.pullRepository("lzs", "1uzs.@00");
+//						System.out.println(flag);
 			//			
 			//			git.applyStash();
 			boolean pushResult = git.pushRepository("lzs", "1uzs.@00");
