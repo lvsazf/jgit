@@ -28,8 +28,10 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.InvalidRemoteException;
 import org.eclipse.jgit.api.errors.TransportException;
 import org.eclipse.jgit.errors.NoWorkTreeException;
+import org.eclipse.jgit.lib.IndexDiff.StageState;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Ref;
+import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.merge.ResolveMerger.MergeFailureReason;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.CredentialsProvider;
@@ -105,21 +107,24 @@ public class ExecGit {
 			CredentialsProvider credentialsProvider = new UsernamePasswordCredentialsProvider(username, password);
 			command.setCredentialsProvider(credentialsProvider);
 		}
-		command.setAtomic(true).setForce(true);
+//		command.setAtomic(true);//.setForce(true) 强制覆盖remote
 		Iterable<PushResult> results = command.setPushAll().call();
 		Iterator<PushResult> iterator = results.iterator();
 		while (iterator.hasNext()) {
 			PushResult next = iterator.next();
+			System.out.println("push result:=" + next.getMessages());
 			Collection<RemoteRefUpdate> remoteUpdates = next.getRemoteUpdates();
 			for (RemoteRefUpdate remoteRefUpdate : remoteUpdates) {
+				System.out.println(remoteRefUpdate.getStatus());
+				System.out.println(remoteRefUpdate.getMessage());
 				if ("OK".equals(remoteRefUpdate.getStatus().name()))
 					flag = true;
 			}
 		}
 		return flag;
 	}
-	
-	public boolean pushRepository(String token) throws GitAPIException{
+	 
+	public boolean pushRepository(String token) throws InvalidRemoteException, TransportException, GitAPIException{
 		return pushRepository(token,"");
 	}
 
@@ -180,6 +185,7 @@ public class ExecGit {
 			CredentialsProvider credentialsProvider = new UsernamePasswordCredentialsProvider(username, password);
 			command.setCredentialsProvider(credentialsProvider);
 		}
+		command.setStrategy(MergeStrategy.RECURSIVE);
 		PullResult result = command.call();
 		MergeResult mergeResult = result.getMergeResult();
 		if (mergeResult != null) {
@@ -259,7 +265,23 @@ public class ExecGit {
 		}
 		return true;
 	}
-
+	
+	public void getConflictFiles() throws NoWorkTreeException, GitAPIException{
+		Status call = git.status().call();
+		Map<String, StageState> conflictingStageState = call.getConflictingStageState();
+		if(conflictingStageState != null){
+			Set<String> keySet = conflictingStageState.keySet();
+			for (String string : keySet) {
+				System.out.println(string);
+				System.out.println(conflictingStageState);
+			}
+			
+		}
+		Set<String> conflicting = call.getConflicting();
+		System.out.println(conflicting);
+		
+	}
+	
 	public void closeGit() {
 		git.close();
 	}
@@ -288,31 +310,29 @@ public class ExecGit {
 		this.git = git;
 	}
 
-	public static void main(String[] args) throws FileNotFoundException, IOException {
+	public static void main(String[] args) throws FileNotFoundException, IOException, GitAPIException {
 		
+	    System.out.println(org.apache.commons.lang3.SystemUtils.IS_OS_WINDOWS);
+	    
 		ExecGit git = null;
 		try {
 			//			ExecGit.cloneRepository("http://git.wex5.com:9999/lzs/lzs.git", "D:/tmp/test2");
-			git = new ExecGit("D:/tmp/test2");
-			git.setaName("test");
-			git.setaEmailAddress("test@163.com");
+//			git = new ExecGit("D:/tmp/test2");
+//			git.setaName("test");
+//			git.setaEmailAddress("test@163.com");
 			//			git.checkout();
 			//			git.getBranch();
 			//			git.showLog();
-			git.commitRepository(".", "");
-			JSONObject listChangedFiles = git.listChangedFiles();
-			System.out.println(listChangedFiles);
-
+//			git.commitRepository(".", "");
+//			boolean flag = git.pullRepository("lzs", "1uzs.@00");
+//			boolean pushResult = git.pushRepository("lzs", "1uzs.@00");
+//			System.out.println(pushResult);
+//			System.out.println(git.listChangedFiles());
+//			git.getConflictFiles();
 			//			git.createStash();
-//						boolean flag = git.pullRepository("lzs", "1uzs.@00");
 //						System.out.println(flag);
 			//			
 			//			git.applyStash();
-			boolean pushResult = git.pushRepository("lzs", "1uzs.@00");
-			System.out.println(pushResult);
-			//			System.out.println(git.listChangedFiles());
-		} catch (GitAPIException e) {
-			e.printStackTrace();
 		} finally {
 			if (git != null)
 				git.closeGit();
